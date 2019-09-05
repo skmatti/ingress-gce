@@ -20,11 +20,13 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
+
 	"github.com/GoogleCloudPlatform/k8s-cloud-provider/pkg/cloud"
 	"github.com/GoogleCloudPlatform/k8s-cloud-provider/pkg/cloud/meta"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/ingress-gce/pkg/composite"
 	"k8s.io/ingress-gce/pkg/utils"
+	"k8s.io/ingress-gce/pkg/utils/namer"
 	"k8s.io/klog"
 )
 
@@ -47,7 +49,7 @@ func (l *L7) ensureComputeURLMap() error {
 	if err != nil {
 		return err
 	}
-	expectedMap := toCompositeURLMap(l.Name, l.runtimeInfo.UrlMap, l.namer, key)
+	expectedMap := toCompositeURLMap(l.runtimeInfo.UrlMap, l.feNamer, key)
 	key.Name = expectedMap.Name
 
 	expectedMap.Version = l.Versions().UrlMap
@@ -66,12 +68,12 @@ func (l *L7) ensureComputeURLMap() error {
 	}
 
 	if mapsEqual(currentMap, expectedMap) {
-		klog.V(4).Infof("URLMap for %q is unchanged", l.Name)
+		klog.V(4).Infof("URLMap for %q is unchanged", l.GetName())
 		l.um = currentMap
 		return nil
 	}
 
-	klog.V(3).Infof("Updating URLMap for %q", l.Name)
+	klog.V(3).Infof("Updating URLMap for %q", l.GetName())
 	expectedMap.Fingerprint = currentMap.Fingerprint
 	if err := composite.UpdateUrlMap(l.cloud, key, expectedMap); err != nil {
 		return fmt.Errorf("UpdateURLMap: %v", err)
@@ -216,12 +218,12 @@ func mapsEqual(a, b *composite.UrlMap) bool {
 // and remove the mapping. When a new path is added to a host (happens
 // more frequently than service deletion) we just need to lookup the 1
 // pathmatcher of the host.
-func toCompositeURLMap(lbName string, g *utils.GCEURLMap, namer *utils.Namer, key *meta.Key) *composite.UrlMap {
-	defaultBackendName := g.DefaultBackend.BackendName(namer)
+func toCompositeURLMap(g *utils.GCEURLMap, feNamer namer.IngressFrontendNamer, key *meta.Key) *composite.UrlMap {
+	defaultBackendName := g.DefaultBackend.BackendName(feNamer.GetBENamer())
 	key.Name = defaultBackendName
 	resourceID := cloud.ResourceID{ProjectID: "", Resource: "backendServices", Key: key}
 	m := &composite.UrlMap{
-		Name:           namer.UrlMap(lbName),
+		Name:           feNamer.UrlMap(),
 		DefaultService: resourceID.ResourcePath(),
 	}
 
@@ -243,7 +245,7 @@ func toCompositeURLMap(lbName string, g *utils.GCEURLMap, namer *utils.Namer, ke
 
 		// GCE ensures that matched rule with longest prefix wins.
 		for _, rule := range hostRule.Paths {
-			beName := rule.Backend.BackendName(namer)
+			beName := rule.Backend.BackendName(feNamer.GetBENamer())
 			key.Name = beName
 			resourceID := cloud.ResourceID{ProjectID: "", Resource: "backendServices", Key: key}
 			beLink := resourceID.ResourcePath()

@@ -24,6 +24,7 @@ import (
 
 	"k8s.io/ingress-gce/pkg/composite"
 	"k8s.io/ingress-gce/pkg/loadbalancers/features"
+	newnamer "k8s.io/ingress-gce/pkg/utils/namer"
 	"k8s.io/legacy-cloud-providers/gce"
 
 	"github.com/GoogleCloudPlatform/k8s-cloud-provider/pkg/cloud/meta"
@@ -79,7 +80,7 @@ type HealthChecks struct {
 	path string
 	// defaultBackend is the default health check path for the default backend.
 	defaultBackendPath string
-	namer              *utils.Namer
+	namer              *newnamer.Namer
 	// This is a workaround which allows us to not have to maintain
 	// a separate health checker for the default backend.
 	defaultBackendSvc types.NamespacedName
@@ -88,7 +89,7 @@ type HealthChecks struct {
 // NewHealthChecker creates a new health checker.
 // cloud: the cloud object implementing SingleHealthCheck.
 // defaultHealthCheckPath: is the HTTP path to use for health checks.
-func NewHealthChecker(cloud HealthCheckProvider, healthCheckPath string, defaultBackendHealthCheckPath string, namer *utils.Namer, defaultBackendSvc types.NamespacedName) HealthChecker {
+func NewHealthChecker(cloud HealthCheckProvider, healthCheckPath string, defaultBackendHealthCheckPath string, namer *newnamer.Namer, defaultBackendSvc types.NamespacedName) HealthChecker {
 	return &HealthChecks{cloud, healthCheckPath, defaultBackendHealthCheckPath, namer, defaultBackendSvc}
 }
 

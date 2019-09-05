@@ -67,9 +67,8 @@ func (s *IngressSyncer) GC(ings []*v1beta1.Ingress) error {
 	// 1) It is a GCLB Ingress.
 	// 2) It is not a candidate for deletion.
 	toCleanup, toKeep := operator.Ingresses(ings).Partition(utils.NeedsCleanup)
-	toKeepIngresses := toKeep.AsList()
-	lbErr := s.controller.GCLoadBalancers(toKeepIngresses)
-	beErr := s.controller.GCBackends(toKeepIngresses)
+	lbErr := s.controller.GCLoadBalancers(toCleanup.AsList())
+	beErr := s.controller.GCBackends(toKeep.AsList())
 	if lbErr != nil {
 		return fmt.Errorf("error running load balancer garbage collection routine: %v", lbErr)
 	}

@@ -20,12 +20,13 @@ import (
 	"fmt"
 
 	"github.com/GoogleCloudPlatform/k8s-cloud-provider/pkg/cloud/meta"
-	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/api/networking/v1beta1"
 	"k8s.io/ingress-gce/pkg/composite"
 	"k8s.io/ingress-gce/pkg/events"
 	"k8s.io/ingress-gce/pkg/flags"
 	"k8s.io/ingress-gce/pkg/loadbalancers/features"
 	"k8s.io/ingress-gce/pkg/utils"
+	"k8s.io/ingress-gce/pkg/utils/namer"
 	"k8s.io/klog"
 	"k8s.io/legacy-cloud-providers/gce"
 )
@@ -33,19 +34,19 @@ import (
 // L7s implements LoadBalancerPool.
 type L7s struct {
 	cloud            *gce.Cloud
-	namer            *utils.Namer
+	namer            *namer.Namer
 	recorderProducer events.RecorderProducer
 }
 
-// Namer returns the namer associated with the L7s.
-func (l *L7s) Namer() *utils.Namer {
+// Namer returns the feNamer associated with the L7s.
+func (l *L7s) Namer() *namer.Namer {
 	return l.namer
 }
 
 // NewLoadBalancerPool returns a new loadbalancer pool.
 // - cloud: implements LoadBalancers. Used to sync L7 loadbalancer resources
 //	 with the cloud.
-func NewLoadBalancerPool(cloud *gce.Cloud, namer *utils.Namer, recorderProducer events.RecorderProducer) LoadBalancerPool {
+func NewLoadBalancerPool(cloud *gce.Cloud, namer *namer.Namer, recorderProducer events.RecorderProducer) LoadBalancerPool {
 	return &L7s{
 		cloud:            cloud,
 		namer:            namer,
@@ -57,31 +58,33 @@ func NewLoadBalancerPool(cloud *gce.Cloud, namer *utils.Namer, recorderProducer 
 func (l *L7s) Ensure(ri *L7RuntimeInfo) (*L7, error) {
 	lb := &L7{
 		runtimeInfo: ri,
-		Name:        l.namer.LoadBalancer(ri.Name),
 		cloud:       l.cloud,
-		namer:       l.namer,
+		feNamer:     l.GetFrontendNamer(ri.Ingress),
 		recorder:    l.recorderProducer.Recorder(ri.Ingress.Namespace),
 		scope:       features.ScopeFromIngress(ri.Ingress),
 		ingress:     *ri.Ingress,
 	}
 
 	if err := lb.edgeHop(); err != nil {
-		return nil, fmt.Errorf("loadbalancer %v does not exist: %v", lb.Name, err)
+		return nil, fmt.Errorf("loadbalancer %v does not exist: %v", lb.GetName(), err)
 	}
 	return lb, nil
 }
 
 // Delete deletes a load balancer by name.
-func (l *L7s) Delete(name string, versions *features.ResourceVersions, scope meta.KeyType) error {
+func (l *L7s) Delete(ing *v1beta1.Ingress, versions *features.ResourceVersions, scope meta.KeyType) error {
+	feNamer := l.GetFrontendNamer(ing)
 	lb := &L7{
-		runtimeInfo: &L7RuntimeInfo{Name: name},
-		Name:        l.namer.LoadBalancer(name),
-		cloud:       l.cloud,
-		namer:       l.namer,
-		scope:       scope,
+		runtimeInfo: &L7RuntimeInfo{
+			Name:    feNamer.GetLbName(),
+			Ingress: ing,
+		},
+		cloud:   l.cloud,
+		feNamer: feNamer,
+		scope:   scope,
 	}
 
-	klog.V(3).Infof("Deleting lb %v", lb.Name)
+	klog.V(3).Infof("Deleting lb %v", lb.GetName())
 
 	if err := lb.Cleanup(versions); err != nil {
 		return err
@@ -108,37 +111,36 @@ func (l *L7s) List(key *meta.Key, version meta.Version) ([]*composite.UrlMap, er
 
 // GC garbage collects loadbalancers not in the input list.
 // TODO(shance): Update to handle regional and global LB with same name
-func (l *L7s) GC(names []string) error {
-	klog.V(2).Infof("GC(%v)", names)
+func (l *L7s) GC(ings []*v1beta1.Ingress) error {
+	klog.V(2).Infof("GC(%v)", utils.ToLbNames(ings))
 
-	knownLoadBalancers := sets.NewString()
-	for _, n := range names {
-		knownLoadBalancers.Insert(l.namer.LoadBalancer(n))
+	toCleanup := make(map[string]*v1beta1.Ingress)
+	for _, ing := range ings {
+		toCleanup[l.GetFrontendNamer(ing).UrlMap()] = ing
 	}
 
 	// GC L7-ILB LBs if enabled
 	if flags.F.EnableL7Ilb {
 		key, err := composite.CreateKey(l.cloud, "", meta.Regional)
 		if err != nil {
-			return fmt.Errorf("error getting regional key: %v", err)
+			return fmt.Errorf("error getting regional ing: %v", err)
 		}
 		urlMaps, err := l.List(key, features.L7ILBVersions().UrlMap)
 		if err != nil {
 			return fmt.Errorf("error listing regional LBs: %v", err)
 		}
 
-		if err := l.gc(urlMaps, knownLoadBalancers, features.L7ILBVersions()); err != nil {
+		if err := l.gc(urlMaps, toCleanup, features.L7ILBVersions()); err != nil {
 			return fmt.Errorf("error gc-ing regional LBs: %v", err)
 		}
 	}
 
-	// TODO(shance): fix list taking a key
 	urlMaps, err := l.List(meta.GlobalKey(""), meta.VersionGA)
 	if err != nil {
 		return fmt.Errorf("error listing global LBs: %v", err)
 	}
 
-	if errors := l.gc(urlMaps, knownLoadBalancers, features.GAResourceVersions); errors != nil {
+	if errors := l.gc(urlMaps, toCleanup, features.GAResourceVersions); errors != nil {
 		return fmt.Errorf("error gcing global LBs: %v", errors)
 	}
 
@@ -147,28 +149,26 @@ func (l *L7s) GC(names []string) error {
 
 // gc is a helper for GC
 // TODO(shance): get versions from description
-func (l *L7s) gc(urlMaps []*composite.UrlMap, knownLoadBalancers sets.String, versions *features.ResourceVersions) []error {
+func (l *L7s) gc(urlMaps []*composite.UrlMap, toCleanup map[string]*v1beta1.Ingress, versions *features.ResourceVersions) []error {
 	var errors []error
 
 	// Delete unknown loadbalancers
 	for _, um := range urlMaps {
-		nameParts := l.namer.ParseName(um.Name)
-		l7Name := l.namer.LoadBalancerFromLbName(nameParts.LbName)
 
-		if knownLoadBalancers.Has(l7Name) {
-			klog.V(3).Infof("Load balancer %v is still valid, not GC'ing", l7Name)
+		ing, ok := toCleanup[um.Name]
+		if !ok {
+			klog.V(3).Infof("Load balancer associated with URL Map %s is still valid, not GC'ing", um.Name)
 			continue
 		}
-
 		scope, err := composite.ScopeFromSelfLink(um.SelfLink)
 		if err != nil {
 			errors = append(errors, fmt.Errorf("error getting scope from self link for urlMap %v: %v", um, err))
 			continue
 		}
 
-		klog.V(2).Infof("GCing loadbalancer %v", l7Name)
-		if err := l.Delete(l7Name, versions, scope); err != nil {
-			errors = append(errors, fmt.Errorf("error deleting loadbalancer %q", l7Name))
+		klog.V(2).Infof("GCing loadbalancer for Ingress %v", ing)
+		if err := l.Delete(ing, versions, scope); err != nil {
+			errors = append(errors, fmt.Errorf("error deleting loadbalancer for Ingress %v", ing))
 		}
 	}
 	return nil
@@ -176,9 +176,17 @@ func (l *L7s) gc(urlMaps []*composite.UrlMap, knownLoadBalancers sets.String, ve
 
 // Shutdown logs whether or not the pool is empty.
 func (l *L7s) Shutdown() error {
-	if err := l.GC([]string{}); err != nil {
+	if err := l.GC([]*v1beta1.Ingress{}); err != nil {
 		return err
 	}
 	klog.V(2).Infof("Loadbalancer pool shutdown.")
 	return nil
+}
+
+// GetFrontendNamer return front based on ingress scheme
+// Shutdown logs whether or not the pool is empty.
+func (l *L7s) GetFrontendNamer(ing *v1beta1.Ingress) namer.IngressFrontendNamer {
+	frondEndNamerFactory := namer.NewIngressFrontendNamerFactoryImpl(l.namer)
+	return frondEndNamerFactory.CreateIngressFrontendNamer(namer.LegacyNamingScheme, ing)
+
 }

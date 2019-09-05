@@ -18,18 +18,21 @@ package loadbalancers
 
 import (
 	"fmt"
-	"github.com/GoogleCloudPlatform/k8s-cloud-provider/pkg/cloud/meta"
-	"k8s.io/ingress-gce/pkg/composite"
-	"k8s.io/ingress-gce/pkg/loadbalancers/features"
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/GoogleCloudPlatform/k8s-cloud-provider/pkg/cloud/meta"
+	"k8s.io/api/networking/v1beta1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/ingress-gce/pkg/composite"
+	"k8s.io/ingress-gce/pkg/loadbalancers/features"
+	newnamer "k8s.io/ingress-gce/pkg/utils/namer"
 
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/ingress-gce/pkg/context"
-	"k8s.io/ingress-gce/pkg/utils"
 	"k8s.io/legacy-cloud-providers/gce"
 )
 
@@ -49,20 +52,24 @@ func TestGC(t *testing.T) {
 	l7sPool := pool.(*L7s)
 	cloud := l7sPool.cloud
 	testCases := []struct {
-		desc       string
-		ingressLBs []string
-		gcpLBs     []string
-		expectLBs  []string
+		desc      string
+		ingresses []*v1beta1.Ingress
+		gcpLBs    []string
+		expectLBs []string
 	}{
 		{
-			desc:       "empty",
-			ingressLBs: []string{},
-			gcpLBs:     []string{},
-			expectLBs:  []string{},
+			desc:      "empty",
+			ingresses: []*v1beta1.Ingress{},
+			gcpLBs:    []string{},
+			expectLBs: []string{},
 		},
 		{
-			desc:       "remove all lbs",
-			ingressLBs: []string{},
+			desc: "remove all lbs",
+			ingresses: []*v1beta1.Ingress{
+				createIngress(longName[:10], longName[:10]),
+				createIngress(longName[:20], longName[:20]),
+				createIngress(longName[:20], longName[:27]),
+			},
 			gcpLBs: []string{
 				generateKey(longName[:10], longName[:10]),
 				generateKey(longName[:20], longName[:20]),
@@ -75,8 +82,15 @@ func TestGC(t *testing.T) {
 			// if the name is too long, it truncates the suffix which contains the cluster uid
 			// if cluster uid section of a name is too short or completely truncated,
 			// ingress controller will leak the resource instead.
-			desc:       "remove all lbs but with leaks",
-			ingressLBs: []string{},
+			desc: "remove all lbs but with leaks",
+			ingresses: []*v1beta1.Ingress{
+				createIngress(longName[:10], longName[:10]),
+				createIngress(longName[:20], longName[:20]),
+				createIngress(longName[:20], longName[:27]),
+				createIngress(longName[:21], longName[:27]),
+				createIngress(longName[:22], longName[:27]),
+				createIngress(longName[:50], longName[:30]),
+			},
 			gcpLBs: []string{
 				generateKey(longName[:10], longName[:10]),
 				generateKey(longName[:20], longName[:20]),
@@ -93,23 +107,18 @@ func TestGC(t *testing.T) {
 		},
 		{
 			desc: "no LB exists",
-			ingressLBs: []string{
-				generateKey(longName[:10], longName[:10]),
-				generateKey(longName[:20], longName[:20]),
-				generateKey(longName[:20], longName[:27]),
-				generateKey(longName[:50], longName[:30]),
+			ingresses: []*v1beta1.Ingress{
+				createIngress(longName[:10], longName[:10]),
+				createIngress(longName[:20], longName[:20]),
+				createIngress(longName[:20], longName[:27]),
+				createIngress(longName[:50], longName[:30]),
 			},
 			gcpLBs:    []string{},
 			expectLBs: []string{},
 		},
 		{
-			desc: "no LB get GCed",
-			ingressLBs: []string{
-				generateKey(longName[:10], longName[:10]),
-				generateKey(longName[:20], longName[:20]),
-				generateKey(longName[:20], longName[:30]),
-				generateKey(longName, longName),
-			},
+			desc:      "no LB get GCed",
+			ingresses: []*v1beta1.Ingress{},
 			gcpLBs: []string{
 				generateKey(longName[:10], longName[:10]),
 				generateKey(longName[:20], longName[:20]),
@@ -125,9 +134,9 @@ func TestGC(t *testing.T) {
 		},
 		{
 			desc: "some LB get GCed",
-			ingressLBs: []string{
-				generateKey(longName[:10], longName[:10]),
-				generateKey(longName, longName),
+			ingresses: []*v1beta1.Ingress{
+				createIngress(longName[:20], longName[:20]),
+				createIngress(longName[:20], longName[:27]),
 			},
 			gcpLBs: []string{
 				generateKey(longName[:10], longName[:10]),
@@ -142,9 +151,10 @@ func TestGC(t *testing.T) {
 		},
 		{
 			desc: "some LB get GCed and some leaked",
-			ingressLBs: []string{
-				generateKey(longName[:10], longName[:10]),
-				generateKey(longName, longName),
+			ingresses: []*v1beta1.Ingress{
+				createIngress(longName[:20], longName[:20]),
+				createIngress(longName[:20], longName[:27]),
+				createIngress(longName[:21], longName[:27]),
 			},
 			gcpLBs: []string{
 				generateKey(longName[:10], longName[:10]),
@@ -161,7 +171,7 @@ func TestGC(t *testing.T) {
 		},
 	}
 
-	otherNamer := utils.NewNamer("clusteruid", "fw1")
+	otherNamer := newnamer.NewNamer("clusteruid", "fw1")
 	otherKeys := []string{
 		"a/a",
 		"namespace/name",
@@ -180,7 +190,7 @@ func TestGC(t *testing.T) {
 			createFakeLoadbalancer(l7sPool.cloud, l7sPool.namer, key, versions, defaultScope)
 		}
 
-		err := l7sPool.GC(tc.ingressLBs)
+		err := l7sPool.GC(tc.ingresses)
 		if err != nil {
 			t.Errorf("For case %q, do not expect err: %v", tc.desc, err)
 		}
@@ -188,7 +198,7 @@ func TestGC(t *testing.T) {
 		// check if other LB are not deleted
 		for _, key := range otherKeys {
 			if err := checkFakeLoadBalancer(l7sPool.cloud, otherNamer, key, versions, defaultScope, true); err != nil {
-				t.Errorf("For case %q and key %q, do not expect err: %v", tc.desc, key, err)
+				t.Errorf("For case %q and ing %q, do not expect err: %v", tc.desc, key, err)
 			}
 		}
 
@@ -199,17 +209,17 @@ func TestGC(t *testing.T) {
 		}
 
 		// check if the ones that are expected to be GC is actually GCed.
-		expectRemovedLBs := sets.NewString(tc.gcpLBs...).Difference(sets.NewString(tc.expectLBs...)).Difference(sets.NewString(tc.ingressLBs...))
+		expectRemovedLBs := sets.NewString(tc.gcpLBs...).Difference(sets.NewString(tc.expectLBs...)).Difference(sets.NewString(ingressesToLbNames(tc.ingresses)...))
 		for _, key := range expectRemovedLBs.List() {
 			if err := checkFakeLoadBalancer(l7sPool.cloud, l7sPool.namer, key, versions, defaultScope, false); err != nil {
-				t.Errorf("For case %q and key %q, do not expect err: %v", tc.desc, key, err)
+				t.Errorf("For case %q and ing %q, do not expect err: %v", tc.desc, key, err)
 			}
 		}
 
 		// check if all expected LBs exists
 		for _, key := range tc.expectLBs {
 			if err := checkFakeLoadBalancer(l7sPool.cloud, l7sPool.namer, key, versions, defaultScope, true); err != nil {
-				t.Errorf("For case %q and key %q, do not expect err: %v", tc.desc, key, err)
+				t.Errorf("For case %q and ing %q, do not expect err: %v", tc.desc, key, err)
 			}
 			removeFakeLoadBalancer(l7sPool.cloud, l7sPool.namer, key, versions, defaultScope)
 		}
@@ -223,12 +233,12 @@ func TestDoNotGCWantedLB(t *testing.T) {
 	namer := l7sPool.namer
 	type testCase struct {
 		desc string
-		key  string
+		ing  *v1beta1.Ingress
 	}
 	testCases := []testCase{}
 
 	for i := 3; i <= len(longName)*2+1; i++ {
-		testCases = append(testCases, testCase{fmt.Sprintf("Ingress Key is %d characters long.", i), generateKeyWithLength(i)})
+		testCases = append(testCases, testCase{fmt.Sprintf("Ingress Key is %d characters long.", i), createIngress(generateKeyWithLength(i))})
 	}
 
 	numOfExtraUrlMap := 2
@@ -238,20 +248,21 @@ func TestDoNotGCWantedLB(t *testing.T) {
 	versions := features.GAResourceVersions
 
 	for _, tc := range testCases {
-		createFakeLoadbalancer(l7sPool.cloud, namer, tc.key, versions, defaultScope)
-		err := l7sPool.GC([]string{tc.key})
+		ingKey := generateKey(tc.ing.Namespace, tc.ing.Name)
+		createFakeLoadbalancer(l7sPool.cloud, namer, ingKey, versions, defaultScope)
+		err := l7sPool.GC([]*v1beta1.Ingress{})
 		if err != nil {
 			t.Errorf("For case %q, do not expect err: %v", tc.desc, err)
 		}
 
-		if err := checkFakeLoadBalancer(l7sPool.cloud, namer, tc.key, versions, defaultScope, true); err != nil {
+		if err := checkFakeLoadBalancer(l7sPool.cloud, namer, ingKey, versions, defaultScope, true); err != nil {
 			t.Errorf("For case %q, do not expect err: %v", tc.desc, err)
 		}
 		urlMaps, _ := l7sPool.cloud.ListURLMaps()
 		if len(urlMaps) != 1+numOfExtraUrlMap {
 			t.Errorf("For case %q, expect %d urlmaps, but got %d.", tc.desc, 1+numOfExtraUrlMap, len(urlMaps))
 		}
-		removeFakeLoadBalancer(l7sPool.cloud, namer, tc.key, versions, defaultScope)
+		removeFakeLoadBalancer(l7sPool.cloud, namer, ingKey, versions, defaultScope)
 	}
 }
 
@@ -264,29 +275,30 @@ func TestGCToLeakLB(t *testing.T) {
 	namer := l7sPool.namer
 	type testCase struct {
 		desc string
-		key  string
+		ing  *v1beta1.Ingress
 	}
 	testCases := []testCase{}
 	for i := 3; i <= len(longName)*2+1; i++ {
-		testCases = append(testCases, testCase{fmt.Sprintf("Ingress Key is %d characters long.", i), generateKeyWithLength(i)})
+		testCases = append(testCases, testCase{fmt.Sprintf("Ingress Key is %d characters long.", i), createIngress(generateKeyWithLength(i))})
 	}
 
 	versions := features.GAResourceVersions
 
 	for _, tc := range testCases {
-		createFakeLoadbalancer(l7sPool.cloud, namer, tc.key, versions, defaultScope)
-		err := l7sPool.GC([]string{})
+		ingKey := generateKey(tc.ing.Namespace, tc.ing.Name)
+		createFakeLoadbalancer(l7sPool.cloud, namer, ingKey, versions, defaultScope)
+		err := l7sPool.GC([]*v1beta1.Ingress{tc.ing})
 		if err != nil {
 			t.Errorf("For case %q, do not expect err: %v", tc.desc, err)
 		}
 
-		if len(tc.key) >= resourceLeakLimit {
-			if err := checkFakeLoadBalancer(l7sPool.cloud, namer, tc.key, versions, defaultScope, true); err != nil {
+		if len(ingKey) >= resourceLeakLimit {
+			if err := checkFakeLoadBalancer(l7sPool.cloud, namer, ingKey, versions, defaultScope, true); err != nil {
 				t.Errorf("For case %q, do not expect err: %v", tc.desc, err)
 			}
-			removeFakeLoadBalancer(l7sPool.cloud, namer, tc.key, versions, defaultScope)
+			removeFakeLoadBalancer(l7sPool.cloud, namer, ingKey, versions, defaultScope)
 		} else {
-			if err := checkFakeLoadBalancer(l7sPool.cloud, namer, tc.key, versions, defaultScope, false); err != nil {
+			if err := checkFakeLoadBalancer(l7sPool.cloud, namer, ingKey, versions, defaultScope, false); err != nil {
 				t.Errorf("For case %q, do not expect err: %v", tc.desc, err)
 			}
 		}
@@ -294,49 +306,49 @@ func TestGCToLeakLB(t *testing.T) {
 }
 
 func newTestLoadBalancerPool() LoadBalancerPool {
-	namer := utils.NewNamer(testClusterName, "fw1")
+	namer := newnamer.NewNamer(testClusterName, "fw1")
 	fakeGCECloud := gce.NewFakeGCECloud(gce.DefaultTestClusterValues())
 	ctx := &context.ControllerContext{}
 	return NewLoadBalancerPool(fakeGCECloud, namer, ctx)
 }
 
-func createFakeLoadbalancer(cloud *gce.Cloud, namer *utils.Namer, lbKey string, versions *features.ResourceVersions, scope meta.KeyType) {
+func createFakeLoadbalancer(cloud *gce.Cloud, namer *newnamer.Namer, lbKey string, versions *features.ResourceVersions, scope meta.KeyType) {
 	lbName := namer.LoadBalancer(lbKey)
 	key, _ := composite.CreateKey(cloud, "", scope)
 
-	key.Name = namer.ForwardingRule(lbName, utils.HTTPProtocol)
+	key.Name = namer.ForwardingRule(lbName, newnamer.HTTPProtocol)
 	composite.CreateForwardingRule(cloud, key, &composite.ForwardingRule{Name: key.Name, Version: versions.ForwardingRule})
 
-	key.Name = namer.TargetProxy(lbName, utils.HTTPProtocol)
+	key.Name = namer.TargetProxy(lbName, newnamer.HTTPProtocol)
 	composite.CreateTargetHttpProxy(cloud, key, &composite.TargetHttpProxy{Name: key.Name, Version: versions.TargetHttpProxy})
 
 	key.Name = namer.UrlMap(lbName)
 	composite.CreateUrlMap(cloud, key, &composite.UrlMap{Name: key.Name, Version: versions.UrlMap})
 
-	cloud.ReserveGlobalAddress(&compute.Address{Name: namer.ForwardingRule(lbName, utils.HTTPProtocol)})
+	cloud.ReserveGlobalAddress(&compute.Address{Name: namer.ForwardingRule(lbName, newnamer.HTTPProtocol)})
 
 }
 
-func removeFakeLoadBalancer(cloud *gce.Cloud, namer *utils.Namer, lbKey string, versions *features.ResourceVersions, scope meta.KeyType) {
+func removeFakeLoadBalancer(cloud *gce.Cloud, namer *newnamer.Namer, lbKey string, versions *features.ResourceVersions, scope meta.KeyType) {
 	lbName := namer.LoadBalancer(lbKey)
 
 	key, _ := composite.CreateKey(cloud, "", scope)
-	key.Name = namer.ForwardingRule(lbName, utils.HTTPProtocol)
+	key.Name = namer.ForwardingRule(lbName, newnamer.HTTPProtocol)
 	composite.DeleteForwardingRule(cloud, key, versions.ForwardingRule)
 
-	key.Name = namer.TargetProxy(lbName, utils.HTTPProtocol)
+	key.Name = namer.TargetProxy(lbName, newnamer.HTTPProtocol)
 	composite.DeleteTargetHttpProxy(cloud, key, versions.TargetHttpProxy)
 
 	key.Name = namer.UrlMap(lbName)
 	composite.DeleteUrlMap(cloud, key, versions.UrlMap)
 
-	cloud.DeleteGlobalAddress(namer.ForwardingRule(lbName, utils.HTTPProtocol))
+	cloud.DeleteGlobalAddress(namer.ForwardingRule(lbName, newnamer.HTTPProtocol))
 }
 
-func checkFakeLoadBalancer(cloud *gce.Cloud, namer *utils.Namer, lbKey string, versions *features.ResourceVersions, scope meta.KeyType, expectPresent bool) error {
+func checkFakeLoadBalancer(cloud *gce.Cloud, namer *newnamer.Namer, lbKey string, versions *features.ResourceVersions, scope meta.KeyType, expectPresent bool) error {
 	var err error
 	lbName := namer.LoadBalancer(lbKey)
-	key, _ := composite.CreateKey(cloud, namer.ForwardingRule(lbName, utils.HTTPProtocol), scope)
+	key, _ := composite.CreateKey(cloud, namer.ForwardingRule(lbName, newnamer.HTTPProtocol), scope)
 
 	_, err = composite.GetForwardingRule(cloud, key, versions.ForwardingRule)
 	if expectPresent && err != nil {
@@ -346,7 +358,7 @@ func checkFakeLoadBalancer(cloud *gce.Cloud, namer *utils.Namer, lbKey string, v
 		return fmt.Errorf("expect GlobalForwardingRule %q to not present: %v", key, err)
 	}
 
-	key.Name = namer.TargetProxy(lbName, utils.HTTPProtocol)
+	key.Name = namer.TargetProxy(lbName, newnamer.HTTPProtocol)
 	_, err = composite.GetTargetHttpProxy(cloud, key, versions.TargetHttpProxy)
 	if expectPresent && err != nil {
 		return err
@@ -370,7 +382,7 @@ func generateKey(namespace, name string) string {
 	return fmt.Sprintf("%s/%s", namespace, name)
 }
 
-func generateKeyWithLength(length int) string {
+func generateKeyWithLength(length int) (string, string) {
 	if length < 3 {
 		length = 3
 	}
@@ -378,5 +390,22 @@ func generateKeyWithLength(length int) string {
 		length = 201
 	}
 	length = length - 1
-	return fmt.Sprintf("%s/%s", longName[:length/2], longName[:length-length/2])
+	return longName[:length/2], longName[:length-length/2]
+}
+
+func ingressesToLbNames(ings []*v1beta1.Ingress) []string {
+	var lbNames []string
+	for _, ing := range ings {
+		lbNames = append(lbNames, generateKey(ing.Namespace, ing.Name))
+	}
+	return lbNames
+}
+
+func createIngress(namespace, name string) *v1beta1.Ingress {
+	return &v1beta1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+	}
 }

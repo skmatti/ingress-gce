@@ -20,6 +20,7 @@ import (
 	"k8s.io/api/networking/v1beta1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/ingress-gce/pkg/utils/namer"
 
 	"fmt"
 
@@ -61,7 +62,7 @@ func (sp ServicePort) GetDescription() Description {
 }
 
 // BackendName returns the name of the backend which would be used for this ServicePort.
-func (sp ServicePort) BackendName(namer *Namer) string {
+func (sp ServicePort) BackendName(namer *namer.Namer) string {
 	if !sp.NEGEnabled {
 		return namer.IGBackend(sp.NodePort)
 	}

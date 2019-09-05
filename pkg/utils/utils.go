@@ -429,3 +429,12 @@ func ServiceKeyFunc(namespace, name string) string {
 func NeedsCleanup(ing *v1beta1.Ingress) bool {
 	return IsDeletionCandidate(ing.ObjectMeta, FinalizerKey) || !IsGLBCIngress(ing)
 }
+
+// ToLbNames returns a list of load balancers given a list of ingresses.
+func ToLbNames(ings []*v1beta1.Ingress) []string {
+	var lbNames []string
+	for _, ing := range ings {
+		lbNames = append(lbNames, IngressKeyFunc(ing))
+	}
+	return lbNames
+}

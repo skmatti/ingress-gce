@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/kubernetes/fake"
+	namer2 "k8s.io/ingress-gce/pkg/utils/namer"
 
 	"k8s.io/ingress-gce/pkg/annotations"
 	backendconfigclient "k8s.io/ingress-gce/pkg/backendconfig/client/clientset/versioned/fake"
@@ -70,7 +71,7 @@ func newLoadBalancerController() *LoadBalancerController {
 	fakeGCE := gce.NewFakeGCECloud(gce.DefaultTestClusterValues())
 
 	(fakeGCE.Compute().(*cloud.MockGCE)).MockGlobalForwardingRules.InsertHook = loadbalancers.InsertGlobalForwardingRuleHook
-	namer := utils.NewNamer(clusterUID, "")
+	namer := namer2.NewNamer(clusterUID, "")
 
 	stopCh := make(chan struct{})
 	ctxConfig := context.ControllerContextConfig{
@@ -284,7 +285,7 @@ func TestIngressCreateDeleteFinalizer(t *testing.T) {
 				}
 
 				if updatedIng != nil {
-					t.Fatalf("Ingress was not deleted, got: %+v", updatedIng)
+					t.Fatalf("Ingress was not deleted, got: %+v, ingress: %s", updatedIng, name)
 				}
 
 				remainingIngresses, err := lbc.ctx.KubeClient.NetworkingV1beta1().Ingresses("default").List(meta_v1.ListOptions{})

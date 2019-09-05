@@ -415,8 +415,8 @@ func (lbc *LoadBalancerController) SyncLoadBalancer(state interface{}) error {
 }
 
 // GCLoadBalancers implements Controller.
-func (lbc *LoadBalancerController) GCLoadBalancers(toKeep []*v1beta1.Ingress) error {
-	return lbc.l7Pool.GC(toLbNames(toKeep))
+func (lbc *LoadBalancerController) GCLoadBalancers(toCleanup []*v1beta1.Ingress) error {
+	return lbc.l7Pool.GC(toCleanup)
 }
 
 // MaybeRemoveFinalizers cleans up Finalizers if needed.
@@ -619,17 +619,4 @@ func (lbc *LoadBalancerController) ToSvcPorts(ings []*v1beta1.Ingress) []utils.S
 		knownPorts = append(knownPorts, urlMap.AllServicePorts()...)
 	}
 	return knownPorts
-}
-
-// toLbNames returns a list of load balancers owned by this controller given a list of ingresses.
-func toLbNames(ings []*v1beta1.Ingress) []string {
-	lbNames := make([]string, 0, len(ings))
-	for _, ing := range ings {
-		// Only resources associated with GCE Ingress are managed by this controller.
-		if !utils.IsGCEIngress(ing) {
-			continue
-		}
-		lbNames = append(lbNames, utils.IngressKeyFunc(ing))
-	}
-	return lbNames
 }

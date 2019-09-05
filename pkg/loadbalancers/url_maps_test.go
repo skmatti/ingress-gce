@@ -19,6 +19,8 @@ package loadbalancers
 import (
 	"github.com/GoogleCloudPlatform/k8s-cloud-provider/pkg/cloud/meta"
 	"k8s.io/ingress-gce/pkg/composite"
+	namer2 "k8s.io/ingress-gce/pkg/utils/namer"
+
 	"testing"
 
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -79,8 +81,10 @@ func TestToComputeURLMap(t *testing.T) {
 		},
 	}
 
-	namer := utils.NewNamer("uid1", "fw1")
-	gotComputeURLMap := toCompositeURLMap("lb-name", gceURLMap, namer, meta.GlobalKey("lb-name"))
+	namer := namer2.NewNamer("uid1", "fw1")
+	ing := createIngress("ns", "lb-name")
+	feNamer := namer2.NewLegacyIngressFrontendNamer(ing, namer)
+	gotComputeURLMap := toCompositeURLMap(gceURLMap, feNamer, meta.GlobalKey("ns-lb-name"))
 	if !mapsEqual(gotComputeURLMap, wantComputeMap) {
 		t.Errorf("toComputeURLMap() = \n%+v\n   want\n%+v", gotComputeURLMap, wantComputeMap)
 	}

@@ -40,7 +40,7 @@ type Controller interface {
 	GCBackends(toKeep []*v1beta1.Ingress) error
 	// SyncLoadBalancer syncs the front-end load balancer resources for a GCLB given some existing state.
 	SyncLoadBalancer(state interface{}) error
-	// GCLoadBalancers garbage collects front-end load balancer resources for all ingresses given a list of ingresses to exclude from GC.
+	// GCLoadBalancers garbage collects front-end load balancer resources given a list of ingresses to GC.
 	GCLoadBalancers(toKeep []*v1beta1.Ingress) error
 	// PostProcess allows for doing some post-processing after an Ingress is synced to a GCLB.
 	PostProcess(state interface{}) error

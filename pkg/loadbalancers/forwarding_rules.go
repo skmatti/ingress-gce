@@ -18,8 +18,10 @@ package loadbalancers
 
 import (
 	"fmt"
+
 	"k8s.io/ingress-gce/pkg/composite"
 	"k8s.io/ingress-gce/pkg/utils"
+	"k8s.io/ingress-gce/pkg/utils/namer"
 	"k8s.io/klog"
 )
 
@@ -32,7 +34,7 @@ func (l *L7) checkHttpForwardingRule() (err error) {
 	if l.tp == nil {
 		return fmt.Errorf("cannot create forwarding rule without proxy")
 	}
-	name := l.namer.ForwardingRule(l.Name, utils.HTTPProtocol)
+	name := l.feNamer.ForwardingRule(namer.HTTPProtocol)
 	address, _ := l.getEffectiveIP()
 	fw, err := l.checkForwardingRule(name, l.tp.SelfLink, address, httpDefaultPortRange)
 	if err != nil {
@@ -44,10 +46,10 @@ func (l *L7) checkHttpForwardingRule() (err error) {
 
 func (l *L7) checkHttpsForwardingRule() (err error) {
 	if l.tps == nil {
-		klog.V(3).Infof("No https target proxy for %v, not created https forwarding rule", l.Name)
+		klog.V(3).Infof("No https target proxy for %v, not created https forwarding rule", l.GetName())
 		return nil
 	}
-	name := l.namer.ForwardingRule(l.Name, utils.HTTPSProtocol)
+	name := l.feNamer.ForwardingRule(namer.HTTPSProtocol)
 	address, _ := l.getEffectiveIP()
 	fws, err := l.checkForwardingRule(name, l.tps.SelfLink, address, httpsDefaultPortRange)
 	if err != nil {

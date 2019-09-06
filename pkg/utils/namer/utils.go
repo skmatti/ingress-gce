@@ -17,9 +17,29 @@ limitations under the License.
 package namer
 
 import (
+	"crypto/sha256"
+	"fmt"
+	"strconv"
+	"strings"
+
 	"k8s.io/api/networking/v1beta1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/klog"
 )
+
+const ClusterUIDLength = 8
+
+// lookup table to maintain entropy when converting bytes to string.
+var table []string
+
+func init() {
+	for i := 0; i < 10; i++ {
+		table = append(table, strconv.Itoa(i))
+	}
+	for i := 0; i < 26; i++ {
+		table = append(table, string('a'+rune(i)))
+	}
+}
 
 func IngressKeyFunc(ing *v1beta1.Ingress) string {
 	if ing == nil {
@@ -63,4 +83,34 @@ func TrimFieldsEvenly(max int, fields ...string) []string {
 	}
 
 	return ret
+}
+
+// IsV2UrlMap returns true if the name is a URL Map created using new name scheme and owned by this cluster.
+// It checks that the UID is present and a substring of the
+// cluster uid, since the new naming schema truncates it to 8 characters.
+// URL map owned by another cluster may be considered as an URL map owned by this cluster if
+// 8 character cluster prefix matches. This should be fine as URL map is deleted only if
+// the full name matches with an URL map of any Ingress from this cluster.
+func IsV2UrlMap(name string, n *Namer) bool {
+	return strings.HasPrefix(name, fmt.Sprintf("%s%s-%s", n.prefix, schemaVersionV2, n.shortUID()))
+}
+
+func ParseV2ClusterUID(umName string) string {
+	parts := strings.Split(umName, "-")
+	if len(parts) < 3 || !strings.HasSuffix(parts[0], schemaVersionV2) {
+		klog.Fatalf("invalid URL map name: %s", umName)
+		return ""
+	}
+	return parts[1]
+}
+
+// Hash creates a content hash string of length n of s utilizing sha256.
+func Hash(s string, n int) string {
+	var h string
+	bytes := sha256.Sum256(([]byte)(s))
+	for i := 0; i < n && i < len(bytes); i++ {
+		idx := int(bytes[i]) % len(table)
+		h += table[idx]
+	}
+	return h
 }

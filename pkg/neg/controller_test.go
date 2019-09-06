@@ -38,7 +38,7 @@ import (
 	"k8s.io/ingress-gce/pkg/flags"
 	negtypes "k8s.io/ingress-gce/pkg/neg/types"
 	"k8s.io/ingress-gce/pkg/utils"
-	namer2 "k8s.io/ingress-gce/pkg/utils/namer"
+	namer_util "k8s.io/ingress-gce/pkg/utils/namer"
 
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/legacy-cloud-providers/gce"
@@ -64,7 +64,7 @@ var (
 
 func newTestController(kubeClient kubernetes.Interface) *Controller {
 	backendConfigClient := backendconfigclient.NewSimpleClientset()
-	namer := namer2.NewNamer(ClusterID, "")
+	namer := namer_util.NewNamer(ClusterID, "")
 	ctxConfig := context.ControllerContextConfig{
 		Namespace:             apiv1.NamespaceAll,
 		ResyncPeriod:          1 * time.Second,

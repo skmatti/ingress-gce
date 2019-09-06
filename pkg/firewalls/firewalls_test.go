@@ -22,10 +22,10 @@ import (
 
 	"google.golang.org/api/compute/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
-	namer2 "k8s.io/ingress-gce/pkg/utils/namer"
+	namer_util "k8s.io/ingress-gce/pkg/utils/namer"
 )
 
-var namer = namer2.NewNamer("ABC", "XYZ")
+var namer = namer_util.NewNamer("ABC", "XYZ")
 var ruleName = namer.FirewallRule()
 var srcRanges = []string{"1.1.1.1/11", "2.2.2.2/22"}
 

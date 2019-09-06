@@ -17,15 +17,14 @@ limitations under the License.
 package utils
 
 import (
+	"fmt"
+
 	"k8s.io/api/networking/v1beta1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/ingress-gce/pkg/utils/namer"
-
-	"fmt"
-
 	"k8s.io/ingress-gce/pkg/annotations"
 	backendconfigv1beta1 "k8s.io/ingress-gce/pkg/apis/backendconfig/v1beta1"
+	"k8s.io/ingress-gce/pkg/utils/namer"
 )
 
 // ServicePortID contains the Service and Port fields.
@@ -51,6 +50,7 @@ type ServicePort struct {
 	NEGEnabled    bool
 	L7ILBEnabled  bool
 	BackendConfig *backendconfigv1beta1.BackendConfig
+	BackendNamer  namer.BackendNamer
 }
 
 // GetDescription returns a Description for this ServicePort.
@@ -62,12 +62,17 @@ func (sp ServicePort) GetDescription() Description {
 }
 
 // BackendName returns the name of the backend which would be used for this ServicePort.
-func (sp ServicePort) BackendName(namer *namer.Namer) string {
+func (sp ServicePort) BackendName() string {
 	if !sp.NEGEnabled {
-		return namer.IGBackend(sp.NodePort)
+		return sp.BackendNamer.IGBackend(sp.NodePort)
+	} else {
+		return sp.BackendNamer.NEG(sp.ID.Service.Namespace, sp.ID.Service.Name, sp.Port)
 	}
+}
 
-	return namer.NEG(sp.ID.Service.Namespace, sp.ID.Service.Name, sp.Port)
+// IGName returns the name of the instance group which would be used for this ServicePort.
+func (sp ServicePort) IGName() string {
+	return sp.BackendNamer.InstanceGroup()
 }
 
 // BackendToServicePortID creates a ServicePortID from a given IngressBackend and namespace.

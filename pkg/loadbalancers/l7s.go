@@ -76,7 +76,6 @@ func (l *L7s) Delete(ing *v1beta1.Ingress, versions *features.ResourceVersions, 
 	feNamer := l.GetFrontendNamer(ing)
 	lb := &L7{
 		runtimeInfo: &L7RuntimeInfo{
-			Name:    feNamer.GetLbName(),
 			Ingress: ing,
 		},
 		cloud:   l.cloud,
@@ -101,7 +100,7 @@ func (l *L7s) List(key *meta.Key, version meta.Version) ([]*composite.UrlMap, er
 	}
 
 	for _, um := range urlMaps {
-		if l.namer.NameBelongsToCluster(um.Name) {
+		if l.namer.NameBelongsToCluster(um.Name) || namer.IsV2UrlMap(um.Name, l.namer) {
 			result = append(result, um)
 		}
 	}
@@ -151,7 +150,6 @@ func (l *L7s) GC(ings []*v1beta1.Ingress) error {
 // TODO(shance): get versions from description
 func (l *L7s) gc(urlMaps []*composite.UrlMap, toCleanup map[string]*v1beta1.Ingress, versions *features.ResourceVersions) []error {
 	var errors []error
-
 	// Delete unknown loadbalancers
 	for _, um := range urlMaps {
 
@@ -187,6 +185,16 @@ func (l *L7s) Shutdown() error {
 // Shutdown logs whether or not the pool is empty.
 func (l *L7s) GetFrontendNamer(ing *v1beta1.Ingress) namer.IngressFrontendNamer {
 	frondEndNamerFactory := namer.NewIngressFrontendNamerFactoryImpl(l.namer)
-	return frondEndNamerFactory.CreateIngressFrontendNamer(namer.LegacyNamingScheme, ing)
+	if !flags.F.FinalizerAdd {
+		return frondEndNamerFactory.CreateIngressFrontendNamer(namer.LegacyNamingScheme, ing)
+	}
 
+	if utils.HasGivenFinalizer(ing.ObjectMeta, utils.FinalizerKeyV2) {
+		return frondEndNamerFactory.CreateIngressFrontendNamer(namer.V2NamingScheme, ing)
+	} else if utils.HasGivenFinalizer(ing.ObjectMeta, utils.FinalizerKey) {
+		return frondEndNamerFactory.CreateIngressFrontendNamer(namer.LegacyNamingScheme, ing)
+	}
+
+	klog.V(2).Infof("No naming scheme found for Ingress %v, using Legacy naming scheme", ing)
+	return frondEndNamerFactory.CreateIngressFrontendNamer(namer.LegacyNamingScheme, ing)
 }

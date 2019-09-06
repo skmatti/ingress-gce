@@ -19,7 +19,7 @@ package loadbalancers
 import (
 	"github.com/GoogleCloudPlatform/k8s-cloud-provider/pkg/cloud/meta"
 	"k8s.io/ingress-gce/pkg/composite"
-	namer2 "k8s.io/ingress-gce/pkg/utils/namer"
+	namer_util "k8s.io/ingress-gce/pkg/utils/namer"
 
 	"testing"
 
@@ -49,19 +49,20 @@ func TestToComputeURLMap(t *testing.T) {
 	t.Parallel()
 
 	wantComputeMap := testCompositeURLMap()
+	namer := namer_util.NewNamer("uid1", "fw1")
 	gceURLMap := &utils.GCEURLMap{
-		DefaultBackend: &utils.ServicePort{NodePort: 30000},
+		DefaultBackend: &utils.ServicePort{NodePort: 30000, BackendNamer: namer_util.NewBackendNamer(namer)},
 		HostRules: []utils.HostRule{
 			{
 				Hostname: "abc.com",
 				Paths: []utils.PathRule{
 					{
 						Path:    "/web",
-						Backend: utils.ServicePort{NodePort: 32000},
+						Backend: utils.ServicePort{NodePort: 32000, BackendNamer: namer_util.NewBackendNamer(namer)},
 					},
 					{
 						Path:    "/other",
-						Backend: utils.ServicePort{NodePort: 32500},
+						Backend: utils.ServicePort{NodePort: 32500, BackendNamer: namer_util.NewBackendNamer(namer)},
 					},
 				},
 			},
@@ -70,20 +71,19 @@ func TestToComputeURLMap(t *testing.T) {
 				Paths: []utils.PathRule{
 					{
 						Path:    "/",
-						Backend: utils.ServicePort{NodePort: 33000},
+						Backend: utils.ServicePort{NodePort: 33000, BackendNamer: namer_util.NewBackendNamer(namer)},
 					},
 					{
 						Path:    "/*",
-						Backend: utils.ServicePort{NodePort: 33500},
+						Backend: utils.ServicePort{NodePort: 33500, BackendNamer: namer_util.NewBackendNamer(namer)},
 					},
 				},
 			},
 		},
 	}
 
-	namer := namer2.NewNamer("uid1", "fw1")
 	ing := createIngress("ns", "lb-name")
-	feNamer := namer2.NewLegacyIngressFrontendNamer(ing, namer)
+	feNamer := namer_util.NewLegacyIngressFrontendNamer(ing, namer)
 	gotComputeURLMap := toCompositeURLMap(gceURLMap, feNamer, meta.GlobalKey("ns-lb-name"))
 	if !mapsEqual(gotComputeURLMap, wantComputeMap) {
 		t.Errorf("toComputeURLMap() = \n%+v\n   want\n%+v", gotComputeURLMap, wantComputeMap)

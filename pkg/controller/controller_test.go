@@ -18,6 +18,7 @@ package controller
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -31,7 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/kubernetes/fake"
-	namer2 "k8s.io/ingress-gce/pkg/utils/namer"
+	namer_util "k8s.io/ingress-gce/pkg/utils/namer"
 
 	"k8s.io/ingress-gce/pkg/annotations"
 	backendconfigclient "k8s.io/ingress-gce/pkg/backendconfig/client/clientset/versioned/fake"
@@ -71,7 +72,7 @@ func newLoadBalancerController() *LoadBalancerController {
 	fakeGCE := gce.NewFakeGCECloud(gce.DefaultTestClusterValues())
 
 	(fakeGCE.Compute().(*cloud.MockGCE)).MockGlobalForwardingRules.InsertHook = loadbalancers.InsertGlobalForwardingRuleHook
-	namer := namer2.NewNamer(clusterUID, "")
+	namer := namer_util.NewNamer(clusterUID, "")
 
 	stopCh := make(chan struct{})
 	ctxConfig := context.ControllerContextConfig{
@@ -156,6 +157,13 @@ func backend(name string, port intstr.IntOrString) v1beta1.IngressBackend {
 		ServiceName: name,
 		ServicePort: port,
 	}
+}
+
+func expectedFinalizer() string {
+	if flags.F.FinalizerAdd {
+		return utils.FinalizerKeyV2
+	}
+	return utils.FinalizerKey
 }
 
 // TestIngressSyncError asserts that `sync` will bubble an error when an ingress cannot be synced
@@ -337,7 +345,8 @@ func TestIngressClassChangeWithFinalizer(t *testing.T) {
 		t.Fatalf("Get(%v) = %v, want nil", ingStoreKey, err)
 	}
 	ingFinalizers := updatedIng.GetFinalizers()
-	if len(ingFinalizers) != 1 || ingFinalizers[0] != utils.FinalizerKey {
+	expectedFinalizer := expectedFinalizer()
+	if len(ingFinalizers) != 1 || ingFinalizers[0] != expectedFinalizer {
 		t.Fatalf("updatedIng.GetFinalizers() = %+v, want [%s]; failed to add finalizer, updatedIng = %+v", ingFinalizers, utils.FinalizerKey, updatedIng)
 	}
 
@@ -398,7 +407,10 @@ func TestIngressesWithSharedResourcesWithFinalizer(t *testing.T) {
 	// Assert service ports are being shared.
 	ingSvcPorts := lbc.ToSvcPorts([]*v1beta1.Ingress{ing})
 	otherIngSvcPorts := lbc.ToSvcPorts([]*v1beta1.Ingress{otherIng})
-	if diff := cmp.Diff(ingSvcPorts, otherIngSvcPorts); diff != "" {
+	comparer := cmp.Comparer(func(a, b utils.ServicePort) bool {
+		return reflect.DeepEqual(a, b)
+	})
+	if diff := cmp.Diff(ingSvcPorts, otherIngSvcPorts, comparer); diff != "" {
 		t.Errorf("lbc.ToSVCPorts(_) mismatch (-want +got):\n%s", diff)
 	}
 
@@ -471,7 +483,7 @@ func TestEnableFinalizer(t *testing.T) {
 		t.Fatalf("Get(%v) = %v, want nil", ingStoreKey, err)
 	}
 	ingFinalizers := updatedIng.GetFinalizers()
-	if len(ingFinalizers) != 1 || ingFinalizers[0] != utils.FinalizerKey {
+	if len(ingFinalizers) != 1 || ingFinalizers[0] != expectedFinalizer() {
 		t.Fatalf("updatedIng.GetFinalizers() = %+v, want [%s]; failed to add finalizer, updatedIng = %+v", ingFinalizers, utils.FinalizerKey, updatedIng)
 	}
 }

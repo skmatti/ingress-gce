@@ -35,7 +35,7 @@ import (
 	"k8s.io/ingress-gce/pkg/neg/readiness"
 	"k8s.io/ingress-gce/pkg/neg/types"
 	negtypes "k8s.io/ingress-gce/pkg/neg/types"
-	namer2 "k8s.io/ingress-gce/pkg/utils/namer"
+	namer_util "k8s.io/ingress-gce/pkg/utils/namer"
 	"k8s.io/legacy-cloud-providers/gce"
 )
 
@@ -64,7 +64,7 @@ const (
 
 func NewTestSyncerManager(kubeClient kubernetes.Interface) *syncerManager {
 	backendConfigClient := backendconfigclient.NewSimpleClientset()
-	namer := namer2.NewNamer(ClusterID, "")
+	namer := namer_util.NewNamer(ClusterID, "")
 	ctxConfig := context.ControllerContextConfig{
 		Namespace:             apiv1.NamespaceAll,
 		ResyncPeriod:          1 * time.Second,
@@ -536,7 +536,7 @@ func TestReadinessGateEnabled(t *testing.T) {
 
 func TestFilterCommonPorts(t *testing.T) {
 	t.Parallel()
-	namer := namer2.NewNamer(ClusterID, "")
+	namer := namer_util.NewNamer(ClusterID, "")
 
 	for _, tc := range []struct {
 		desc     string

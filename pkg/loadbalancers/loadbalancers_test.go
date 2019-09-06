@@ -53,10 +53,6 @@ const (
 	defaultScope   = meta.Global
 )
 
-var (
-	testDefaultBeNodePort = utils.ServicePort{NodePort: 30000, Protocol: annotations.ProtocolHTTP}
-)
-
 type testJig struct {
 	pool    LoadBalancerPool
 	fakeGCE *gce.Cloud
@@ -153,8 +149,8 @@ func TestCreateHTTPLoadBalancer(t *testing.T) {
 	j := newTestJig(t)
 
 	gceUrlMap := utils.NewGCEURLMap()
-	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234}
-	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{utils.PathRule{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000}}})
+	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234, BackendNamer: namer.NewBackendNamer(j.namer)}
+	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000, BackendNamer: namer.NewBackendNamer(j.namer)}}})
 	ing := newIngress()
 	feNamer := namer.NewLegacyIngressFrontendNamer(ing, j.namer)
 	lbInfo := &L7RuntimeInfo{
@@ -177,8 +173,8 @@ func TestCreateHTTPILBLoadBalancer(t *testing.T) {
 	j := newTestJig(t)
 
 	gceUrlMap := utils.NewGCEURLMap()
-	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234}
-	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{utils.PathRule{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000}}})
+	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234, BackendNamer: namer.NewBackendNamer(j.namer)}
+	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000, BackendNamer: namer.NewBackendNamer(j.namer)}}})
 	ing := newIngress()
 	feNamer := namer.NewLegacyIngressFrontendNamer(ing, j.namer)
 	lbInfo := &L7RuntimeInfo{
@@ -201,8 +197,8 @@ func TestCreateHTTPSILBLoadBalancer(t *testing.T) {
 	j := newTestJig(t)
 
 	gceUrlMap := utils.NewGCEURLMap()
-	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234}
-	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{utils.PathRule{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000}}})
+	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234, BackendNamer: namer.NewBackendNamer(j.namer)}
+	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000, BackendNamer: namer.NewBackendNamer(j.namer)}}})
 	ing := newIngress()
 	feNamer := namer.NewLegacyIngressFrontendNamer(ing, j.namer)
 	lbInfo := &L7RuntimeInfo{
@@ -226,8 +222,8 @@ func TestCreateHTTPSLoadBalancer(t *testing.T) {
 	j := newTestJig(t)
 
 	gceUrlMap := utils.NewGCEURLMap()
-	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234}
-	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{utils.PathRule{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000}}})
+	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234, BackendNamer: namer.NewBackendNamer(j.namer)}
+	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000, BackendNamer: namer.NewBackendNamer(j.namer)}}})
 	ing := newIngress()
 	feNamer := namer.NewLegacyIngressFrontendNamer(ing, j.namer)
 	lbInfo := &L7RuntimeInfo{
@@ -317,8 +313,8 @@ func TestCertUpdate(t *testing.T) {
 	j := newTestJig(t)
 
 	gceUrlMap := utils.NewGCEURLMap()
-	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234}
-	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{utils.PathRule{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000}}})
+	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234, BackendNamer: namer.NewBackendNamer(j.namer)}
+	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000, BackendNamer: namer.NewBackendNamer(j.namer)}}})
 	ing := newIngress()
 	feNamer := namer.NewLegacyIngressFrontendNamer(ing, j.namer)
 	certName1 := feNamer.SSLCertName(GetCertHash("cert"))
@@ -356,8 +352,8 @@ func TestMultipleSecretsWithSameCert(t *testing.T) {
 	j := newTestJig(t)
 
 	gceUrlMap := utils.NewGCEURLMap()
-	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234}
-	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{utils.PathRule{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000}}})
+	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234, BackendNamer: namer.NewBackendNamer(j.namer)}
+	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000, BackendNamer: namer.NewBackendNamer(j.namer)}}})
 	ing := newIngress()
 	feNamer := namer.NewLegacyIngressFrontendNamer(ing, j.namer)
 
@@ -386,8 +382,8 @@ func TestCertCreationWithCollision(t *testing.T) {
 	j := newTestJig(t)
 
 	gceUrlMap := utils.NewGCEURLMap()
-	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234}
-	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{utils.PathRule{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000}}})
+	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234, BackendNamer: namer.NewBackendNamer(j.namer)}
+	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000, BackendNamer: namer.NewBackendNamer(j.namer)}}})
 	ing := newIngress()
 	feNamer := namer.NewLegacyIngressFrontendNamer(ing, j.namer)
 	certName1 := feNamer.SSLCertName(GetCertHash("cert"))
@@ -445,8 +441,8 @@ func TestMultipleCertRetentionAfterRestart(t *testing.T) {
 	j := newTestJig(t)
 
 	gceUrlMap := utils.NewGCEURLMap()
-	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234}
-	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{utils.PathRule{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000}}})
+	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234, BackendNamer: namer.NewBackendNamer(j.namer)}
+	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000, BackendNamer: namer.NewBackendNamer(j.namer)}}})
 	cert1 := createCert("ing", "cert", "name")
 	cert2 := createCert("key2", "cert2", "name2")
 	cert3 := createCert("key3", "cert3", "name3")
@@ -497,8 +493,8 @@ func TestUpgradeToNewCertNames(t *testing.T) {
 	j := newTestJig(t)
 
 	gceUrlMap := utils.NewGCEURLMap()
-	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234}
-	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{utils.PathRule{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000}}})
+	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234, BackendNamer: namer.NewBackendNamer(j.namer)}
+	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000, BackendNamer: namer.NewBackendNamer(j.namer)}}})
 	ing := newIngress()
 	feNamer := namer.NewLegacyIngressFrontendNamer(ing, j.namer)
 	lbInfo := &L7RuntimeInfo{
@@ -558,8 +554,8 @@ func TestMaxCertsUpload(t *testing.T) {
 	j := newTestJig(t)
 
 	gceUrlMap := utils.NewGCEURLMap()
-	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234}
-	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{utils.PathRule{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000}}})
+	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234, BackendNamer: namer.NewBackendNamer(j.namer)}
+	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000, BackendNamer: namer.NewBackendNamer(j.namer)}}})
 	var tlsCerts []*TLSCerts
 	expectCerts := make(map[string]string)
 	expectCertsExtra := make(map[string]string)
@@ -623,8 +619,8 @@ func TestIdenticalHostnameCerts(t *testing.T) {
 	j := newTestJig(t)
 
 	gceUrlMap := utils.NewGCEURLMap()
-	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234}
-	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{utils.PathRule{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000}}})
+	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234, BackendNamer: namer.NewBackendNamer(j.namer)}
+	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000, BackendNamer: namer.NewBackendNamer(j.namer)}}})
 	var tlsCerts []*TLSCerts
 	expectCerts := make(map[string]string)
 	ing := newIngress()
@@ -662,8 +658,8 @@ func TestIdenticalHostnameCertsPreShared(t *testing.T) {
 	j := newTestJig(t)
 
 	gceUrlMap := utils.NewGCEURLMap()
-	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234}
-	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{utils.PathRule{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000}}})
+	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234, BackendNamer: namer.NewBackendNamer(j.namer)}
+	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000, BackendNamer: namer.NewBackendNamer(j.namer)}}})
 	ing := newIngress()
 	feNamer := namer.NewLegacyIngressFrontendNamer(ing, j.namer)
 	lbInfo := &L7RuntimeInfo{
@@ -722,8 +718,8 @@ func TestPreSharedToSecretBasedCertUpdate(t *testing.T) {
 	j := newTestJig(t)
 
 	gceUrlMap := utils.NewGCEURLMap()
-	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234}
-	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{utils.PathRule{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000}}})
+	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234, BackendNamer: namer.NewBackendNamer(j.namer)}
+	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000, BackendNamer: namer.NewBackendNamer(j.namer)}}})
 	ing := newIngress()
 	feNamer := namer.NewLegacyIngressFrontendNamer(ing, j.namer)
 	certName1 := feNamer.SSLCertName(GetCertHash("cert"))
@@ -900,8 +896,8 @@ func TestCreateHTTPSLoadBalancerAnnotationCert(t *testing.T) {
 	j := newTestJig(t)
 
 	gceUrlMap := utils.NewGCEURLMap()
-	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234}
-	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{utils.PathRule{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000}}})
+	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234, BackendNamer: namer.NewBackendNamer(j.namer)}
+	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000, BackendNamer: namer.NewBackendNamer(j.namer)}}})
 	tlsName := "external-cert-name"
 	ing := newIngress()
 	feNamer := namer.NewLegacyIngressFrontendNamer(ing, j.namer)
@@ -937,8 +933,8 @@ func TestCreateBothLoadBalancers(t *testing.T) {
 	j := newTestJig(t)
 
 	gceUrlMap := utils.NewGCEURLMap()
-	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234}
-	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{utils.PathRule{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000}}})
+	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234, BackendNamer: namer.NewBackendNamer(j.namer)}
+	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000, BackendNamer: namer.NewBackendNamer(j.namer)}}})
 	ing := newIngress()
 	feNamer := namer.NewLegacyIngressFrontendNamer(ing, j.namer)
 	lbInfo := &L7RuntimeInfo{
@@ -1004,15 +1000,15 @@ func TestUrlMapChange(t *testing.T) {
 	um1 := utils.NewGCEURLMap()
 	um2 := utils.NewGCEURLMap()
 
-	um1.PutPathRulesForHost("bar.example.com", []utils.PathRule{utils.PathRule{Path: "/bar2", Backend: utils.ServicePort{NodePort: 30000}}})
-	um1.DefaultBackend = &utils.ServicePort{NodePort: 31234}
+	um1.PutPathRulesForHost("bar.example.com", []utils.PathRule{{Path: "/bar2", Backend: utils.ServicePort{NodePort: 30000, BackendNamer: namer.NewBackendNamer(j.namer)}}})
+	um1.DefaultBackend = &utils.ServicePort{NodePort: 31234, BackendNamer: namer.NewBackendNamer(j.namer)}
 
 	um2.PutPathRulesForHost("foo.example.com", []utils.PathRule{
-		utils.PathRule{Path: "/foo1", Backend: utils.ServicePort{NodePort: 30001}},
-		utils.PathRule{Path: "/foo2", Backend: utils.ServicePort{NodePort: 30002}},
+		{Path: "/foo1", Backend: utils.ServicePort{NodePort: 30001, BackendNamer: namer.NewBackendNamer(j.namer)}},
+		{Path: "/foo2", Backend: utils.ServicePort{NodePort: 30002, BackendNamer: namer.NewBackendNamer(j.namer)}},
 	})
-	um2.PutPathRulesForHost("bar.example.com", []utils.PathRule{utils.PathRule{Path: "/bar1", Backend: utils.ServicePort{NodePort: 30003}}})
-	um2.DefaultBackend = &utils.ServicePort{NodePort: 30004}
+	um2.PutPathRulesForHost("bar.example.com", []utils.PathRule{{Path: "/bar1", Backend: utils.ServicePort{NodePort: 30003, BackendNamer: namer.NewBackendNamer(j.namer)}}})
+	um2.DefaultBackend = &utils.ServicePort{NodePort: 30004, BackendNamer: namer.NewBackendNamer(j.namer)}
 
 	ing := newIngress()
 	feNamer := namer.NewLegacyIngressFrontendNamer(ing, j.namer)
@@ -1057,18 +1053,18 @@ func TestPoolSyncNoChanges(t *testing.T) {
 	um2 := utils.NewGCEURLMap()
 
 	um1.PutPathRulesForHost("foo.example.com", []utils.PathRule{
-		utils.PathRule{Path: "/foo1", Backend: utils.ServicePort{NodePort: 30000}},
-		utils.PathRule{Path: "/foo2", Backend: utils.ServicePort{NodePort: 30001}},
+		{Path: "/foo1", Backend: utils.ServicePort{NodePort: 30000, BackendNamer: namer.NewBackendNamer(j.namer)}},
+		{Path: "/foo2", Backend: utils.ServicePort{NodePort: 30001, BackendNamer: namer.NewBackendNamer(j.namer)}},
 	})
-	um1.PutPathRulesForHost("bar.example.com", []utils.PathRule{utils.PathRule{Path: "/bar1", Backend: utils.ServicePort{NodePort: 30002}}})
-	um1.DefaultBackend = &utils.ServicePort{NodePort: 30003}
+	um1.PutPathRulesForHost("bar.example.com", []utils.PathRule{{Path: "/bar1", Backend: utils.ServicePort{NodePort: 30002, BackendNamer: namer.NewBackendNamer(j.namer)}}})
+	um1.DefaultBackend = &utils.ServicePort{NodePort: 30003, BackendNamer: namer.NewBackendNamer(j.namer)}
 
 	um2.PutPathRulesForHost("foo.example.com", []utils.PathRule{
-		utils.PathRule{Path: "/foo1", Backend: utils.ServicePort{NodePort: 30000}},
-		utils.PathRule{Path: "/foo2", Backend: utils.ServicePort{NodePort: 30001}},
+		{Path: "/foo1", Backend: utils.ServicePort{NodePort: 30000, BackendNamer: namer.NewBackendNamer(j.namer)}},
+		{Path: "/foo2", Backend: utils.ServicePort{NodePort: 30001, BackendNamer: namer.NewBackendNamer(j.namer)}},
 	})
-	um2.PutPathRulesForHost("bar.example.com", []utils.PathRule{utils.PathRule{Path: "/bar1", Backend: utils.ServicePort{NodePort: 30002}}})
-	um2.DefaultBackend = &utils.ServicePort{NodePort: 30003}
+	um2.PutPathRulesForHost("bar.example.com", []utils.PathRule{{Path: "/bar1", Backend: utils.ServicePort{NodePort: 30002, BackendNamer: namer.NewBackendNamer(j.namer)}}})
+	um2.DefaultBackend = &utils.ServicePort{NodePort: 30003, BackendNamer: namer.NewBackendNamer(j.namer)}
 
 	ing := newIngress()
 	feNamer := namer.NewLegacyIngressFrontendNamer(ing, j.namer)
@@ -1110,8 +1106,8 @@ func TestClusterNameChange(t *testing.T) {
 	j := newTestJig(t)
 
 	gceUrlMap := utils.NewGCEURLMap()
-	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234}
-	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{utils.PathRule{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000}}})
+	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234, BackendNamer: namer.NewBackendNamer(j.namer)}
+	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000, BackendNamer: namer.NewBackendNamer(j.namer)}}})
 	ing := newIngress()
 	feNamer := namer.NewLegacyIngressFrontendNamer(ing, j.namer)
 	lbInfo := &L7RuntimeInfo{
@@ -1180,8 +1176,8 @@ func TestList(t *testing.T) {
 	j := newTestJig(t)
 
 	gceUrlMap := utils.NewGCEURLMap()
-	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234}
-	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{utils.PathRule{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000}}})
+	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234, BackendNamer: namer.NewBackendNamer(j.namer)}
+	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000, BackendNamer: namer.NewBackendNamer(j.namer)}}})
 	ing := newIngress()
 	feNamer := namer.NewLegacyIngressFrontendNamer(ing, j.namer)
 	lbInfo := &L7RuntimeInfo{
@@ -1235,8 +1231,8 @@ func TestSecretBasedAndPreSharedCerts(t *testing.T) {
 	j := newTestJig(t)
 
 	gceUrlMap := utils.NewGCEURLMap()
-	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234}
-	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{utils.PathRule{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000}}})
+	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234, BackendNamer: namer.NewBackendNamer(j.namer)}
+	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000, BackendNamer: namer.NewBackendNamer(j.namer)}}})
 	namer1 := namer.NewNamer(clusterName, "fw1")
 	ing := newIngress()
 	feNamer := namer.NewLegacyIngressFrontendNamer(ing, namer1)
@@ -1299,8 +1295,8 @@ func TestMaxSecretBasedAndPreSharedCerts(t *testing.T) {
 	j := newTestJig(t)
 
 	gceUrlMap := utils.NewGCEURLMap()
-	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234}
-	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{utils.PathRule{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000}}})
+	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234, BackendNamer: namer.NewBackendNamer(j.namer)}
+	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000, BackendNamer: namer.NewBackendNamer(j.namer)}}})
 
 	var tlsCerts []*TLSCerts
 	expectCerts := make(map[string]string)
@@ -1395,8 +1391,8 @@ func TestSecretBasedToPreSharedCertUpdate(t *testing.T) {
 	j := newTestJig(t)
 
 	gceUrlMap := utils.NewGCEURLMap()
-	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234}
-	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{utils.PathRule{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000}}})
+	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234, BackendNamer: namer.NewBackendNamer(j.namer)}
+	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000, BackendNamer: namer.NewBackendNamer(j.namer)}}})
 	ing := newIngress()
 	feNamer := namer.NewLegacyIngressFrontendNamer(ing, j.namer)
 	certName1 := feNamer.SSLCertName(GetCertHash("cert"))
@@ -1452,8 +1448,8 @@ func TestSecretBasedToPreSharedCertUpdateWithErrors(t *testing.T) {
 	j := newTestJig(t)
 
 	gceUrlMap := utils.NewGCEURLMap()
-	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234}
-	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{utils.PathRule{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000}}})
+	gceUrlMap.DefaultBackend = &utils.ServicePort{NodePort: 31234, BackendNamer: namer.NewBackendNamer(j.namer)}
+	gceUrlMap.PutPathRulesForHost("bar.example.com", []utils.PathRule{{Path: "/bar", Backend: utils.ServicePort{NodePort: 30000, BackendNamer: namer.NewBackendNamer(j.namer)}}})
 	ing := newIngress()
 	feNamer := namer.NewLegacyIngressFrontendNamer(ing, j.namer)
 	certName1 := feNamer.SSLCertName(GetCertHash("cert"))

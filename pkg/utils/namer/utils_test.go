@@ -90,3 +90,25 @@ func TestTrimFieldsEvenly(t *testing.T) {
 		}
 	}
 }
+
+func TestIsV2UrlMap(t *testing.T) {
+	t.Parallel()
+	defaultNamer := NewNamer("cluster1", "")
+	testCases := []struct {
+		desc string
+		name string
+		want bool
+	}{
+		{"old namer", "k8s-um-namespace-name--cluster1", false},
+		{"old namer, with truncated name", "k8s-um-012345678901234567890123456789-0123456789012345678901230", false},
+		{"new namer", "k8s2-cluster1-namespace-name-735cdc61", true},
+		{"new namer, owned by cluster123", "k8s2-cluster1-namespace-name-1ebef71c", true},
+		{"new namer, with truncated name", "k8s2-cluster1-01234567890123456789-0123456789012345-49aea33c", true},
+	}
+
+	for _, tc := range testCases {
+		if got := IsV2UrlMap(tc.name, defaultNamer); got != tc.want {
+			t.Errorf("IsV2UrlMap(%q, %v) = %t, want %t (%s)", tc.name, defaultNamer, got, tc.want, tc.desc)
+		}
+	}
+}

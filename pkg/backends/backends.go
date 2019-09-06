@@ -60,7 +60,7 @@ func ensureDescription(be *composite.BackendService, sp *utils.ServicePort) (nee
 
 // Create implements Pool.
 func (b *Backends) Create(sp utils.ServicePort, hcLink string) (*composite.BackendService, error) {
-	name := sp.BackendName(b.namer)
+	name := sp.BackendName()
 	namedPort := &compute.NamedPort{
 		Name: b.namer.NamedPort(sp.NodePort),
 		Port: sp.NodePort,

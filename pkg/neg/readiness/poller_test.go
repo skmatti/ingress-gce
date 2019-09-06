@@ -21,7 +21,7 @@ import (
 	"google.golang.org/api/compute/v1"
 	"k8s.io/apimachinery/pkg/types"
 	negtypes "k8s.io/ingress-gce/pkg/neg/types"
-	namer2 "k8s.io/ingress-gce/pkg/utils/namer"
+	namer_util "k8s.io/ingress-gce/pkg/utils/namer"
 
 	"net"
 	"strconv"
@@ -310,7 +310,7 @@ func TestPoll(t *testing.T) {
 
 	poller := newFakePoller()
 	negCloud := poller.negCloud
-	namer := namer2.NewNamer("clusteruid", "")
+	namer := namer_util.NewNamer("clusteruid", "")
 
 	ns := "ns"
 	podName := "pod1"

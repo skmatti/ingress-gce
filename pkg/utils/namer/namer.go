@@ -383,7 +383,7 @@ func (n *Namer) IsLegacySSLCert(lbName string, resourceName string) bool {
 // SSLCertName returns the name of the certificate.
 func (n *Namer) SSLCertName(lbName string, secretHash string) string {
 	lbNameHash := n.lbNameToHash(lbName)
-	// k8s-ssl-[lbNameHash]-[certhash]--[clusterUID]
+	// k8s-ssl-[lbNameToHash]-[certhash]--[clusterUID]
 	return n.decorateName(fmt.Sprintf("%s-%s-%s-%s", n.prefix, sslCertPrefix, lbNameHash, secretHash))
 }
 

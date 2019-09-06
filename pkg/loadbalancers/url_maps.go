@@ -219,7 +219,7 @@ func mapsEqual(a, b *composite.UrlMap) bool {
 // more frequently than service deletion) we just need to lookup the 1
 // pathmatcher of the host.
 func toCompositeURLMap(g *utils.GCEURLMap, feNamer namer.IngressFrontendNamer, key *meta.Key) *composite.UrlMap {
-	defaultBackendName := g.DefaultBackend.BackendName(feNamer.GetBENamer())
+	defaultBackendName := g.DefaultBackend.BackendName()
 	key.Name = defaultBackendName
 	resourceID := cloud.ResourceID{ProjectID: "", Resource: "backendServices", Key: key}
 	m := &composite.UrlMap{
@@ -245,7 +245,7 @@ func toCompositeURLMap(g *utils.GCEURLMap, feNamer namer.IngressFrontendNamer, k
 
 		// GCE ensures that matched rule with longest prefix wins.
 		for _, rule := range hostRule.Paths {
-			beName := rule.Backend.BackendName(feNamer.GetBENamer())
+			beName := rule.Backend.BackendName()
 			key.Name = beName
 			resourceID := cloud.ResourceID{ProjectID: "", Resource: "backendServices", Key: key}
 			beLink := resourceID.ResourcePath()

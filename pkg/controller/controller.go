@@ -46,7 +46,6 @@ import (
 	"k8s.io/ingress-gce/pkg/instances"
 	"k8s.io/ingress-gce/pkg/loadbalancers"
 	negtypes "k8s.io/ingress-gce/pkg/neg/types"
-	ingsync "k8s.io/ingress-gce/pkg/sync"
 	"k8s.io/ingress-gce/pkg/tls"
 	"k8s.io/ingress-gce/pkg/utils"
 	"k8s.io/ingress-gce/pkg/utils/common"
@@ -86,9 +85,6 @@ type LoadBalancerController struct {
 	// linker implementations for backends
 	negLinker backends.Linker
 	igLinker  backends.Linker
-
-	// Ingress sync + GC implementation
-	ingSyncer ingsync.Syncer
 }
 
 // NewLoadBalancerController creates a controller for gce loadbalancers.
@@ -120,7 +116,6 @@ func NewLoadBalancerController(
 		negLinker:     backends.NewNEGLinker(backendPool, negtypes.NewAdapter(ctx.Cloud), ctx.Cloud),
 		igLinker:      backends.NewInstanceGroupLinker(instancePool, backendPool),
 	}
-	lbc.ingSyncer = ingsync.NewIngressSyncer(&lbc)
 
 	lbc.ingQueue = utils.NewPeriodicTaskQueue("ingress", "ingresses", lbc.sync)
 
@@ -339,14 +334,9 @@ func (lbc *LoadBalancerController) Stop(deleteAll bool) error {
 	return nil
 }
 
-// SyncBackends implements Controller.
-func (lbc *LoadBalancerController) SyncBackends(state interface{}) error {
-	// We expect state to be a syncState
-	syncState, ok := state.(*syncState)
-	if !ok {
-		return fmt.Errorf("expected state type to be syncState, type was %T", state)
-	}
-	ingSvcPorts := syncState.urlMap.AllServicePorts()
+// SyncBackends syncs the backends for a GCLB given some existing state.
+func (lbc *LoadBalancerController) SyncBackends(state *syncState) error {
+	ingSvcPorts := state.urlMap.AllServicePorts()
 
 	// Create instance groups and set named ports.
 	igs, err := lbc.instancePool.EnsureInstanceGroupsAndPorts(lbc.ctx.ClusterNamer.InstanceGroup(), nodePorts(ingSvcPorts))
@@ -364,8 +354,8 @@ func (lbc *LoadBalancerController) SyncBackends(state interface{}) error {
 	}
 
 	// TODO: Remove this after deprecation
-	ing := syncState.ing
-	if utils.IsGCEMultiClusterIngress(syncState.ing) {
+	ing := state.ing
+	if utils.IsGCEMultiClusterIngress(state.ing) {
 		// Add instance group names as annotation on the ingress and return.
 		if ing.Annotations == nil {
 			ing.Annotations = map[string]string{}
@@ -377,7 +367,7 @@ func (lbc *LoadBalancerController) SyncBackends(state interface{}) error {
 			return err
 		}
 		// This short-circuit will stop the syncer from moving to next step.
-		return ingsync.ErrSkipBackendsSync
+		return ErrSkipBackendsSync
 	}
 
 	// Sync the backends
@@ -410,17 +400,15 @@ func (lbc *LoadBalancerController) SyncBackends(state interface{}) error {
 	return nil
 }
 
-// GCBackends implements Controller.
-func (lbc *LoadBalancerController) GCBackends(toKeep []*v1beta1.Ingress) error {
-	// Only GCE ingress associated resources are managed by this controller.
-	GCEIngresses := operator.Ingresses(toKeep).Filter(utils.IsGCEIngress).AsList()
-	svcPortsToKeep := lbc.ToSvcPorts(GCEIngresses)
+// GCBackends garbage collects backends for all ingresses given a list of ingresses to exclude from GC.
+func (lbc *LoadBalancerController) GCBackends(state *gcState) error {
+	svcPortsToKeep := lbc.ToSvcPorts(state.toKeep)
 	if err := lbc.backendSyncer.GC(svcPortsToKeep); err != nil {
 		return err
 	}
 	// TODO(ingress#120): Move this to the backend pool so it mirrors creation
 	// Do not delete instance group if there exists a GLBC ingress.
-	if len(toKeep) == 0 {
+	if state.toKeepCount == 0 {
 		igName := lbc.ctx.ClusterNamer.InstanceGroup()
 		klog.Infof("Deleting instance group %v", igName)
 		if err := lbc.instancePool.DeleteInstanceGroup(igName); err != err {
@@ -430,15 +418,9 @@ func (lbc *LoadBalancerController) GCBackends(toKeep []*v1beta1.Ingress) error {
 	return nil
 }
 
-// SyncLoadBalancer implements Controller.
-func (lbc *LoadBalancerController) SyncLoadBalancer(state interface{}) error {
-	// We expect state to be a syncState
-	syncState, ok := state.(*syncState)
-	if !ok {
-		return fmt.Errorf("expected state type to be syncState, type was %T", state)
-	}
-
-	lb, err := lbc.toRuntimeInfo(syncState.ing, syncState.urlMap)
+// SyncLoadBalancer syncs the front-end load balancer resources for a GCLB given some existing state.
+func (lbc *LoadBalancerController) SyncLoadBalancer(state *syncState) error {
+	lb, err := lbc.toRuntimeInfo(state.ing, state.urlMap)
 	if err != nil {
 		return err
 	}
@@ -449,24 +431,25 @@ func (lbc *LoadBalancerController) SyncLoadBalancer(state interface{}) error {
 		return err
 	}
 
-	syncState.l7 = l7
+	state.l7 = l7
 	return nil
 }
 
-// GCLoadBalancers implements Controller.
-func (lbc *LoadBalancerController) GCLoadBalancers(toKeep []*v1beta1.Ingress) error {
+// GCLoadBalancers garbage collects front-end load balancer resources for
+// all ingresses given a list of ingresses to exclude from GC.
+func (lbc *LoadBalancerController) GCLoadBalancers(state *gcState) error {
 	// Only GCE ingress associated resources are managed by this controller.
-	GCEIngresses := operator.Ingresses(toKeep).Filter(utils.IsGCEIngress).AsList()
+	GCEIngresses := operator.Ingresses(state.toKeep).Filter(utils.IsGCEIngress).AsList()
 	return lbc.l7Pool.GC(common.ToIngressKeys(GCEIngresses))
 }
 
-// MaybeRemoveFinalizers cleans up Finalizers if needed.
-func (lbc *LoadBalancerController) MaybeRemoveFinalizers(toCleanup []*v1beta1.Ingress) error {
+// EnsureDeleteFinalizers ensures that finalizers are removed.
+func (lbc *LoadBalancerController) EnsureDeleteFinalizers(state *gcState) error {
 	if !flags.F.FinalizerRemove {
 		klog.V(4).Infof("Removing finalizers not enabled")
 		return nil
 	}
-	for _, ing := range toCleanup {
+	for _, ing := range state.toCleanup {
 		ingClient := lbc.ctx.KubeClient.NetworkingV1beta1().Ingresses(ing.Namespace)
 		if err := common.RemoveFinalizer(ing, ingClient); err != nil {
 			klog.Errorf("Failed to remove Finalizer from Ingress %s/%s: %v", ing.Namespace, ing.Name, err)
@@ -476,16 +459,10 @@ func (lbc *LoadBalancerController) MaybeRemoveFinalizers(toCleanup []*v1beta1.In
 	return nil
 }
 
-// PostProcess implements Controller.
-func (lbc *LoadBalancerController) PostProcess(state interface{}) error {
-	// We expect state to be a syncState
-	syncState, ok := state.(*syncState)
-	if !ok {
-		return fmt.Errorf("expected state type to be syncState, type was %T", state)
-	}
-
+// PostProcess allows for doing some post-processing after an Ingress is synced to a GCLB.
+func (lbc *LoadBalancerController) PostProcess(state *syncState) error {
 	// Update the ingress status.
-	return lbc.updateIngressStatus(syncState.l7, syncState.ing)
+	return lbc.updateIngressStatus(state.l7, state.ing)
 }
 
 // sync manages Ingress create/updates/deletes events from queue.
@@ -501,12 +478,12 @@ func (lbc *LoadBalancerController) sync(key string) error {
 		return fmt.Errorf("error getting Ingress for key %s: %v", key, err)
 	}
 
-	// Snapshot of list of ingresses.
-	allIngresses := lbc.ctx.Ingresses().List()
+	// Snapshot of list of all ingresses.
+	gcState := newGcState(ing, lbc.ctx.Ingresses().List())
 	// Determine if the ingress needs to be GCed.
 	if !ingExists || utils.NeedsCleanup(ing) {
 		// GC will find GCE resources that were used for this ingress and delete them.
-		return lbc.ingSyncer.GC(allIngresses)
+		return lbc.GC(gcState)
 	}
 
 	// Get ingress and DeepCopy for assurance that we don't pollute other goroutines with changes.
@@ -530,7 +507,7 @@ func (lbc *LoadBalancerController) sync(key string) error {
 
 	// Sync GCP resources.
 	syncState := &syncState{urlMap, ing, nil}
-	syncErr := lbc.ingSyncer.Sync(syncState)
+	syncErr := lbc.Sync(syncState)
 	if syncErr != nil {
 		lbc.ctx.Recorder(ing.Namespace).Eventf(ing, apiv1.EventTypeWarning, "Sync", fmt.Sprintf("Error during sync: %v", syncErr.Error()))
 	}
@@ -538,7 +515,7 @@ func (lbc *LoadBalancerController) sync(key string) error {
 	// Garbage collection will occur regardless of an error occurring. If an error occurred,
 	// it could have been caused by quota issues; therefore, garbage collecting now may
 	// free up enough quota for the next sync to pass.
-	if gcErr := lbc.ingSyncer.GC(allIngresses); gcErr != nil {
+	if gcErr := lbc.GC(gcState); gcErr != nil {
 		return fmt.Errorf("error during sync %v, error during GC %v", syncErr, gcErr)
 	}
 

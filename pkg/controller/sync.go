@@ -14,15 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package sync
+package controller
 
 import (
 	"errors"
 	"fmt"
-
-	"k8s.io/api/networking/v1beta1"
-	"k8s.io/ingress-gce/pkg/common/operator"
-	"k8s.io/ingress-gce/pkg/utils"
 )
 
 // ErrSkipBackendsSync is an error that can be returned by a Controller to
@@ -30,30 +26,20 @@ import (
 // processes should be skipped as well.
 var ErrSkipBackendsSync = errors.New("ingress skip backends sync and beyond")
 
-// IngressSyncer processes an Ingress spec and produces a load balancer given
-// an implementation of Controller.
-type IngressSyncer struct {
-	controller Controller
-}
-
-func NewIngressSyncer(controller Controller) Syncer {
-	return &IngressSyncer{controller}
-}
-
 // Sync implements Syncer.
-func (s *IngressSyncer) Sync(state interface{}) error {
-	if err := s.controller.SyncBackends(state); err != nil {
+func (lbc *LoadBalancerController) Sync(state *syncState) error {
+	if err := lbc.SyncBackends(state); err != nil {
 		if err == ErrSkipBackendsSync {
 			return nil
 		}
 		return fmt.Errorf("error running backend syncing routine: %v", err)
 	}
 
-	if err := s.controller.SyncLoadBalancer(state); err != nil {
+	if err := lbc.SyncLoadBalancer(state); err != nil {
 		return fmt.Errorf("error running load balancer syncing routine: %v", err)
 	}
 
-	if err := s.controller.PostProcess(state); err != nil {
+	if err := lbc.PostProcess(state); err != nil {
 		return fmt.Errorf("error running post-process routine: %v", err)
 	}
 
@@ -61,15 +47,9 @@ func (s *IngressSyncer) Sync(state interface{}) error {
 }
 
 // GC implements Syncer.
-func (s *IngressSyncer) GC(ings []*v1beta1.Ingress) error {
-	// Partition GC state into ingresses those need cleanup and those don't.
-	// An Ingress is considered to exist and not considered for cleanup, if:
-	// 1) It is a GCLB Ingress.
-	// 2) It is not a candidate for deletion.
-	toCleanup, toKeep := operator.Ingresses(ings).Partition(utils.NeedsCleanup)
-	toKeepIngresses := toKeep.AsList()
-	lbErr := s.controller.GCLoadBalancers(toKeepIngresses)
-	beErr := s.controller.GCBackends(toKeepIngresses)
+func (lbc *LoadBalancerController) GC(state *gcState) error {
+	lbErr := lbc.GCLoadBalancers(state)
+	beErr := lbc.GCBackends(state)
 	if lbErr != nil {
 		return fmt.Errorf("error running load balancer garbage collection routine: %v", lbErr)
 	}
@@ -77,5 +57,5 @@ func (s *IngressSyncer) GC(ings []*v1beta1.Ingress) error {
 		return fmt.Errorf("error running backend garbage collection routine: %v", beErr)
 	}
 
-	return s.controller.MaybeRemoveFinalizers(toCleanup.AsList())
+	return lbc.EnsureDeleteFinalizers(state)
 }

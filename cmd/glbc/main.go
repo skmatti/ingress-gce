@@ -40,6 +40,7 @@ import (
 
 	ingctx "k8s.io/ingress-gce/pkg/context"
 	"k8s.io/ingress-gce/pkg/controller"
+	"k8s.io/ingress-gce/pkg/metrics"
 	"k8s.io/ingress-gce/pkg/neg"
 	negtypes "k8s.io/ingress-gce/pkg/neg/types"
 
@@ -131,6 +132,9 @@ func main() {
 	}
 	kubeSystemUID := kubeSystemNS.GetUID()
 
+	// Initialize ingress usage metrics.
+	ingresMetrics := metrics.NewIngressMetrics()
+
 	cloud := app.NewGCEClient()
 	defaultBackendServicePort := app.DefaultBackendServicePort(kubeClient)
 	ctxConfig := ingctx.ControllerContextConfig{
@@ -144,7 +148,7 @@ func main() {
 		ASMConfigMapNamespace:         flags.F.ASMConfigMapBasedConfigNamespace,
 		ASMConfigMapName:              flags.F.ASMConfigMapBasedConfigCMName,
 	}
-	ctx := ingctx.NewControllerContext(kubeConfig, kubeClient, backendConfigClient, frontendConfigClient, cloud, namer, kubeSystemUID, ctxConfig)
+	ctx := ingctx.NewControllerContext(kubeConfig, kubeClient, backendConfigClient, frontendConfigClient, cloud, namer, kubeSystemUID, ingresMetrics, ctxConfig)
 	go app.RunHTTPServer(ctx.HealthCheck)
 
 	if !flags.F.LeaderElection.LeaderElect {
@@ -228,6 +232,9 @@ func runControllers(ctx *ingctx.ControllerContext) {
 
 	go fwc.Run()
 	klog.V(0).Infof("firewall controller started")
+
+	// Export ingress usage metrics.
+	go ctx.IngressMetrics.Run(stopCh)
 
 	ctx.Start(stopCh)
 	lbc.Init()

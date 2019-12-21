@@ -42,6 +42,7 @@ import (
 	"k8s.io/ingress-gce/pkg/flags"
 	"k8s.io/ingress-gce/pkg/instances"
 	"k8s.io/ingress-gce/pkg/loadbalancers"
+	"k8s.io/ingress-gce/pkg/metrics"
 	"k8s.io/ingress-gce/pkg/test"
 	"k8s.io/ingress-gce/pkg/tls"
 	"k8s.io/ingress-gce/pkg/utils"
@@ -72,7 +73,7 @@ func newLoadBalancerController() *LoadBalancerController {
 		HealthCheckPath:               "/",
 		DefaultBackendHealthCheckPath: "/healthz",
 	}
-	ctx := context.NewControllerContext(nil, kubeClient, backendConfigClient, nil, fakeGCE, namer, "" /*kubeSystemUID*/, ctxConfig)
+	ctx := context.NewControllerContext(nil, kubeClient, backendConfigClient, nil, fakeGCE, namer, "" /*kubeSystemUID*/, metrics.NewIngressMetrics(), ctxConfig)
 	lbc := NewLoadBalancerController(ctx, stopCh)
 	// TODO(rramkumar): Fix this so we don't have to override with our fake
 	lbc.instancePool = instances.NewNodePool(instances.NewFakeInstanceGroups(sets.NewString(), namer), namer)
